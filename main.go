@@ -1,8 +1,8 @@
 package main
 
 import (
-	"./server"
-	"./db"
+	"xbegd/server"
+	"xbegd/db"
 )
 
 func main() {

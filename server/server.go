@@ -6,7 +6,7 @@ import (
 	"net"
 	"strings"
 
-	"../db"
+	"xbegd/db"
 )
 
 type Server struct {
@@ -33,7 +33,9 @@ func (s *Server)handleConnection(conn net.Conn) {
 		msg = strings.TrimSpace(msg)
 		fmt.Printf("Recieved: %s\n", msg)
 
-		conn.Write([]byte("ECHO: " + msg + "\n"))
+		// conn.Write([]byte("ECHO: " + msg + "\n"))
+		var response = s.db.HandleCommand(msg)
+		conn.Write([]byte(response + "\n"))
 	}
 }
 
