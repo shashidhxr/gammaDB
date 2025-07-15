@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"xbegd/db"
 )
@@ -18,9 +19,13 @@ func New(db *db.DB) *Server {
 }
 
 func (s *Server)handleConnection(conn net.Conn) {
-	defer conn.Close()
-
 	// todo - conn deadline(timeout)
+
+	conn.SetDeadline(time.Now().Add(30 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	
+	defer conn.Close()
 
 	var reader = bufio.NewReader(conn)
 	for {
@@ -29,6 +34,8 @@ func (s *Server)handleConnection(conn net.Conn) {
 			fmt.Println("Client Disconnected")
 			return
 		}
+
+		conn.SetDeadline(time.Now().Add(30 * time.Second))
 
 		msg = strings.TrimSpace(msg)
 		fmt.Printf("Recieved: %s\n", msg)
