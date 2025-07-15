@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"xbegd/db"
@@ -12,17 +13,23 @@ import (
 
 type Server struct {
 	db *db.DB
+	nodeId string
+	peers map[string]string
+	peerMutex sync.RWMutex
 }
 
-func New(db *db.DB) *Server {
-	return &Server{	db: db}
+func New(db *db.DB, nodeId string) *Server {
+	return &Server {
+		db: db,
+		nodeId: nodeId,
+		peers: make(map[string]string), 
+	}
 }
 
 func (s *Server)handleConnection(conn net.Conn) {
-	// todo - conn deadline(timeout)
 
-	conn.SetDeadline(time.Now().Add(30 * time.Second))
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetDeadline(time.Now().Add(30 * time.Second))				// os.ErrDeadlineExceeded
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))				// r and w for threads 
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	
 	defer conn.Close()
@@ -35,14 +42,14 @@ func (s *Server)handleConnection(conn net.Conn) {
 			return
 		}
 
-		conn.SetDeadline(time.Now().Add(30 * time.Second))
-
 		msg = strings.TrimSpace(msg)
 		fmt.Printf("Recieved: %s\n", msg)
-
+		
 		// conn.Write([]byte("ECHO: " + msg + "\n"))
 		var response = s.db.HandleCommand(msg)
+		
 		conn.Write([]byte(response + "\n"))
+		conn.SetDeadline(time.Now().Add(30 * time.Second))
 	}
 }
 
