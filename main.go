@@ -6,11 +6,12 @@ import (
 )
 
 func main() {
-	var database = db.New()
+	var db1 = db.New()
 
-	var svr = server.New(database)
+	var svr1 = server.New(db1, "node1")
+	svr1.AddPeer("node2", "localhost:9091")
+	go svr1.Start("9090")
+	svr1.StartHeartbeat()
 
-	if err := svr.Start("9090"); err != nil {			// gg
-		panic(err)
-	}
+	select{}
 }
