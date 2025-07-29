@@ -15,13 +15,13 @@
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
-### 📦 Prerequisites
+### Prerequisites
 - Go 1.20+
 - Git
 
-### 📥 Installation
+### Installation
 
 ```bash
 git clone https://github.com/yourusername/gammaDB.git
