@@ -37,14 +37,14 @@ go build
 ### API Documentation
 
 #### HTTP API     (to be implemented)
-GET    /v1/key/{key}        # Get value  
-POST   /v1/key/{key}        # Set value (body: {"value": "..."})  
-DELETE /v1/key/{key}        # Delete key
+GET    /v1/key/{key} 
+POST   /v1/key/{key}
+DELETE /v1/key/{key}
 
 #### TCP Protocol
-SET <key> <value>           # Set key-value pair  
-GET <key>                   # Get value  
-DELETE <key>                   # Delete key
+SET <key> <value>
+GET <key>
+DELETE <key>
 
 
 ### Development Roadmap
