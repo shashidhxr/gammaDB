@@ -24,7 +24,7 @@
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/gammaDB.git
+git clone https://github.com/shashidhxr/gammaDB.git
 cd gammDB
 go build
 
