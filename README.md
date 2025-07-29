@@ -29,9 +29,9 @@ cd gammDB
 go build
 
 # Start a 3-node cluster
-./gammaDB -id node1 -cluster -port 9090
-./gammaDB -id node2 -cluster -port 9091
-./gammaDB -id node3 -cluster -port 9092
+./gammaDB -id node1 -port 9090
+./gammaDB -id node2 -port 9091
+./gammaDB -id node3 -port 9092
 ```
 
 ### API Documentation
