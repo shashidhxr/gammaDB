@@ -6,8 +6,6 @@
 
 ## Features
 
-
-
 - **Distributed Storage**: Data partitioned across multiple nodes  
 - **Replication**: Ensures data redundancy and availability  
 - **Heartbeat Protocol**: Detects node failures and maintains cluster health  

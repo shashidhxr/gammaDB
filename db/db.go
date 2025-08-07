@@ -8,11 +8,13 @@ import (
 type DB struct {
 	data map[string]string
 	mu sync.RWMutex
+	nodeId string
 }
 
-func New() *DB {			// gg
+func New(nodeId string) *DB {			// gg
 	return &DB {
 		data: make(map[string]string),
+		nodeId: nodeId,
 	}
 }
 

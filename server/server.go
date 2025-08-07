@@ -28,38 +28,70 @@ func New(db *db.DB, nodeId string) *Server {
 
 func (s *Server) handleConnection(conn net.Conn) {
 
-	conn.SetDeadline(time.Now().Add(30 * time.Second))				// os.ErrDeadlineExceeded
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))				// r and w for threads 
-	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	defer conn.Close()					// ?
 	
-	defer conn.Close()
-
+	conn.SetDeadline(time.Now().Add(30 * time.Second))				// os.ErrDeadlineExceeded
+	
 	var reader = bufio.NewReader(conn)
 	for {
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))				// r and w for threads 
+		
+		
 		var msg, err = reader.ReadString('\n')
 		if err != nil {
-			fmt.Println("Client Disconnected")
+			fmt.Printf("Client connection disconnected: %v\n", err)
 			return
 		}
-
+		
 		msg = strings.TrimSpace(msg)
 		fmt.Printf("Recieved: %s\n", msg)
-
+		
 		if strings.HasPrefix(msg, "PING ") {
-			conn.Write([]byte("PONG\n"))
-			conn.SetDeadline(time.Now().Add(30 * time.Second))
+			var response = "PONG " + s.nodeId + "\n"
+			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			
+			var _, err = conn.Write([]byte(response))
+			if err != nil {
+				fmt.Printf("Failed to send PONG: %v\n", err)
+				return
+			}
+			
+			conn.SetDeadline(time.Now().Add(30 * time.Second))		// reset deadline after success
 			continue
 		}
 		
-		if strings.HasPrefix(msg, "SET ") {		// prob - replicated signature check
-			s.replicateToPeers(msg)
+		
+		var response string
+		
+		if strings.HasPrefix(msg, "SET ") {	
+			if strings.Contains(msg, "/*replicated*/") {
+				msg = strings.ReplaceAll(msg, " /*replicated*/", "")
+				response = s.db.HandleCommand(msg)
+				fmt.Printf("[%s] Executed replicated cmd: %s\n", s.nodeId, msg)
+			} else {						// og cmd
+				fmt.Printf("[%s] Replicating cmd: %s\n", s.nodeId, msg)
+				if s.replicateCommand(msg) {
+					response = s.db.HandleCommand(msg)
+					fmt.Printf("[%s] Cmd replicated and Executed succesfully\n", s.nodeId)
+				} else {
+					response = "ERROR: Failed to Replicate"
+					fmt.Printf("[%s] Replication failed\n", s.nodeId)
+				}
+			}
+			// s.replicateToPeers(msg)
+		} else {
+			response = s.db.HandleCommand(msg)
 		}
 		
 		// conn.Write([]byte("ECHO: " + msg + "\n"))
-		var response = s.db.HandleCommand(msg)
+
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		var _, err2 = conn.Write([]byte(response + "\n"))			// sending response	
+		if err2 != nil {
+			fmt.Printf("Failed to send response: %v\n", err2)
+		}
 		
-		conn.Write([]byte(response + "\n"))
-		conn.SetDeadline(time.Now().Add(30 * time.Second))
+		conn.SetDeadline(time.Now().Add(30 * time.Second))			// reser timeout after success
 	}
 }
 
@@ -68,23 +100,28 @@ func (s *Server) Start(port string) error {
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	defer listener.Close()			// ?
 
-	fmt.Printf("Server started on port %s\n", port)
+	fmt.Printf("[%s] Server started on port %s\n", s.nodeId, port)
 
 	for {
-		conn, err := listener.Accept()
+		var conn, err = listener.Accept()
 		if err != nil {
 			fmt.Printf("Accept error: %v\n", err)
 			continue
 		}
+		fmt.Printf("[%s] New connectino accepted\n", s.nodeId)
 		go s.handleConnection(conn)
 	}
 }
 
 func (s *Server) StartHeartbeat() {
 	go func() {
+		time.Sleep(2 * time.Second)		// ?
+		
 		var ticker = time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		
 		for range ticker.C {
 			s.pingPeers()
 		}
@@ -93,48 +130,148 @@ func (s *Server) StartHeartbeat() {
 
 func (s *Server) pingPeers() {
 	s.peerMutex.RLock()
-	defer s.peerMutex.RUnlock()
+	var peers = make(map[string]string)		// ?
 
 	for id, addr := range s.peers {
-		go func(id string, addr string) {
-			var conn, err = net.DialTimeout("tcp", addr, 2 * time.Second)
+		peers[id] = addr
+	}
+
+	s.peerMutex.RUnlock()		// defer?
+
+	for id, addr := range s.peers {
+		go func(peerId string, peerAddr string) {
+			var conn, err = net.DialTimeout("tcp", peerAddr, 2 * time.Second)
 			
 			if err != nil {
-				fmt.Printf("Node %s (%s) unreachable", id, addr)
+				fmt.Printf("[%s] Node %s (%s) unreachable: %v\n", s.nodeId, peerId, peerAddr, err)
 				return
 			}
 			defer conn.Close()
-			fmt.Fprintf(conn, "PING %s\n", s.nodeId)
+			
+			// Send PING msg
+			pingMsg := fmt.Sprintf("PING %s\n", s.nodeId)
+			conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			_, err = conn.Write([]byte(pingMsg))
+			if err != nil {
+				fmt.Printf("[%s] Failed to send PING to %s: %v\n", s.nodeId, id, err)
+				return
+			}
 
-
+			// Wait for PONg
 			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-			var _, err2 = bufio.NewReader(conn).ReadString('\n')
+			reader := bufio.NewReader(conn)
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Printf("[%s] Node %s (%s) not responding: %v\n", s.nodeId, peerId, peerAddr, err)
+				return
+			}
 
-			if err2 != nil {
-				fmt.Printf("Node %s (%s) is not responding", id, addr)
+			response = strings.TrimSpace(response)
+
+			if strings.HasPrefix(response, "PONG") {
+				fmt.Printf("[%s] node %s(%s) is alive\n", s.nodeId, peerId, peerAddr)
+			} else {
+				fmt.Printf("[%s] Did not recieve PONG from %s: %s\n", s.nodeId, peerId, response)
 			}
 		}(id, addr)
 	}
 }
 
-func (s *Server) replicateToPeers(cmd string) {
-	s.peerMutex.RLock()
-	defer s.peerMutex.RLock()
+func (s *Server) replicateCommand(cmd string) bool {
+    s.peerMutex.RLock() // Read lock for peers map
 
-	for _, addr := range s.peers {
-		go func(addr string) {
-			var conn, err = net.Dial("tcp", addr)
-			if err != nil {
+	peers := make(map[string]string)
+	for id, addr := range s.peers {
+		peers[id] = addr
+	}
+	
+    defer s.peerMutex.RUnlock()
+
+	if len(peers) == 0 {
+		fmt.Printf("[%s] No peers to replicate to\n", s.nodeId)
+		return true
+	}
+
+
+   	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	var successCount = 0
+	var totalPeers = len(peers)
+
+    for id, addr := range s.peers {
+        wg.Add(1)
+        go func(peerId string, peerAddr string) {
+            defer wg.Done()
+            
+            // Connect to peer with timeout
+            conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+            if err != nil {
+				fmt.Printf("[%s] Failed to connect to peer %s for replication: %v\n", s.nodeId, id, err)
+                return
+            }
+            defer conn.Close()
+            			
+            // Send command with replication marker
+			var replCommand = fmt.Sprintf("%s /*replicated*/\n", cmd)
+			conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+			var _, err2 = conn.Write([]byte(replCommand))
+			if err2 != nil {
+				fmt.Printf("[%s] Failed to send replication to %s: %v\n", s.nodeId, peerId, err2)
 				return
 			}
-			defer conn.Close()
-			fmt.Fprintf(conn, "%s /*replicated*/\n", cmd)
-		}(addr)
-	}
+			
+			
+            // Wait for acknowledgment	
+			conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+            reader := bufio.NewReader(conn)
+            ack, err := reader.ReadString('\n')
+			
+            if err != nil || !strings.HasPrefix(ack, "OK") {
+				fmt.Printf("[%s] Failed to receive ack from %s: %v\n", s.nodeId, peerId, err)
+				return
+            }
+
+			ack = strings.TrimSpace(ack)
+			if ack == "OK" {
+				mu.Lock()
+				successCount++
+				mu.Unlock()
+
+				fmt.Printf("[%s] successfully replicated to %s\n", s.nodeId, peerId)
+			} else {
+				fmt.Printf("[%s] replication to %s failed: %s\n", s.nodeId, id, ack)
+			}
+        }(id, addr)
+    }
+
+    wg.Wait() // Wait for all replications to complete
+    
+	var success = successCount == totalPeers
+	fmt.Printf("[%s] replication result: %d/%d peers successful\n", s.nodeId, successCount, totalPeers)
+	return success
 }
+
+// func (s *Server) replicateToPeers(cmd string) {
+// 	s.peerMutex.RLock()
+// 	defer s.peerMutex.RLock()
+
+// 	for _, addr := range s.peers {
+// 		go func(addr string) {
+// 			var conn, err = net.Dial("tcp", addr)
+// 			if err != nil {
+// 				return
+// 			}
+// 			defer conn.Close()
+// 			fmt.Fprintf(conn, "%s /*replicated*/\n", cmd)
+// 		}(addr)
+// 	}
+// }
 
 func (s *Server) AddPeer(nodeId string, addr string) {
 	s.peerMutex.Lock()
 	defer  s.peerMutex.Unlock()
 	s.peers[nodeId] = addr
+
+	fmt.Printf("[%s] Added peer: %s - %s\n", s.nodeId, nodeId, addr)
 }
