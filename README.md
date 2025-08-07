@@ -40,10 +40,11 @@ telnet localhost: 9091
 ``` 
 
 #### DB Commands
+```bash
 SET <key> <value>
 GET <key>
 DELETE <key>
-
+```
 
 ### Development Roadmap
 - Core key-value storage - done
