@@ -37,6 +37,7 @@ telnet localhost:9090
 
 telnet localhost: 9091
     # use db commands
+``` 
 
 #### DB Commands
 SET <key> <value>
