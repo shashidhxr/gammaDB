@@ -8,8 +8,8 @@
 
 - **Distributed Storage**: Data partitioned across multiple nodes  
 - **Replication**: Ensures data redundancy and availability  
+- **Multi-Client Support**: Handles multiple concurrent connections
 - **Heartbeat Protocol**: Detects node failures and maintains cluster health  
-- **Multi-Client Support**: Handles concurrent connections efficiently  
 
 ---
 
@@ -26,20 +26,19 @@ git clone https://github.com/shashidhxr/gammaDB.git
 cd gammDB
 go build
 
-# Start a 3-node cluster
-./gammaDB -id node1 -port 9090
-./gammaDB -id node2 -port 9091
-./gammaDB -id node3 -port 9092
+# Start a 2 nodes with id "node1" and "node2" in 2 terminals
+./gammaDB node1
+./gammaDB node2
 ```
+# To send client requests, from different terminals(mimicing multiple clients)
+```bash
+telnet localhost:9090
+    # use db commands
 
-### API Documentation
+telnet localhost: 9091
+    # use db commands
 
-#### HTTP API     (to be implemented)
-GET    /v1/key/{key} 
-POST   /v1/key/{key}
-DELETE /v1/key/{key}
-
-#### TCP Protocol
+#### DB Commands
 SET <key> <value>
 GET <key>
 DELETE <key>
@@ -47,7 +46,7 @@ DELETE <key>
 
 ### Development Roadmap
 - Core key-value storage - done
-- TCP/HTTP interfaces - done
+- TCP interfaces - done
 - Multi-client connection - done
 - Multi-node connection - done
 - Replication - done
